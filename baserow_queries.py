@@ -112,3 +112,23 @@ def get_product_price(product_id):
         return 0.0 # Devuelve 0.0 si no se encuentra el precio
     except (requests.exceptions.RequestException, ValueError, TypeError):
         return 0.0
+
+def get_product_price(product_id):
+    """Obtiene los datos de una sola fila de producto para leer su precio."""
+    url = f"{config.BASEROW_URL}database/rows/table/{config.ID_TABLA_PRECIOS}/{product_id}/?user_field_names=true"
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
+        response.raise_for_status()
+        product_data = response.json()
+        
+        # El precio es un lookup, que Baserow puede devolver como lista
+        price_data = product_data.get('PRECIO UNITARIO')
+        
+        if isinstance(price_data, list) and price_data:
+            return float(price_data[0].get('value', '0.0').replace(',', ''))
+        elif isinstance(price_data, (int, float, str)):
+             return float(str(price_data).replace(',', ''))
+             
+        return 0.0 # Devuelve 0.0 si no se encuentra el precio
+    except (requests.exceptions.RequestException, ValueError, TypeError):
+        return 0.0
