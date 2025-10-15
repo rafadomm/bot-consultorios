@@ -7,8 +7,8 @@ from datetime import date
 REQUEST_TIMEOUT = 20 # Aumentamos el timeout para la subida de archivos
 HEADERS = {"Authorization": f"Token {config.BASEROW_TOKEN}"}
 
-# ... (Las funciones 'create_provider' y 'create_product' se quedan igual) ...
 def create_provider(provider_name):
+    """Crea una nueva fila en la tabla PROVEEDORES."""
     url = f"{config.BASEROW_URL}database/rows/table/{config.ID_TABLA_PROVEEDORES}/?user_field_names=true"
     payload = {"Nombre": provider_name}
     try:
@@ -16,16 +16,22 @@ def create_provider(provider_name):
         return response.json()
     except requests.exceptions.RequestException: return None
 
-def create_product(product_name, provider_id, unit_price=0.0):
+def create_product(product_name, provider_id):
+    """Crea una nueva fila en la tabla PRECIOS, enlazándola a un proveedor existente."""
     url = f"{config.BASEROW_URL}database/rows/table/{config.ID_TABLA_PRECIOS}/?user_field_names=true"
-    payload = {"PROVEEDOR": [provider_id], "PRODUCTO": product_name, "PRECIO UNITARIO": unit_price}
+    payload = {
+        "PROVEEDOR": [int(provider_id)],
+        "PRODUCTO": product_name
+    }
     try:
-        response = requests.post(url, headers=HEADERS, json=payload, timeout=REQUEST_TIMEOUT); response.raise_for_status()
+        response = requests.post(url, headers=HEADERS, json=payload, timeout=REQUEST_TIMEOUT)
+        response.raise_for_status()
         return response.json()
-    except requests.exceptions.RequestException: return None
+    except requests.exceptions.RequestException as e:
+        print(f"ERROR CRÍTICO al crear producto: {e}", flush=True)
+        return None
 
-# --- ¡NUEVAS FUNCIONES PARA MANEJAR ARCHIVOS! ---
-
+# --- ¡LA FUNCIÓN QUE FALTABA! ---
 def upload_file(file_bytes, file_name):
     """
     Sube un archivo (foto o PDF) al almacenamiento de Baserow y devuelve los datos necesarios para enlazarlo.
