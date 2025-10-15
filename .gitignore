@@ -1,0 +1,12 @@
+# .gitignore
+
+# Ignorar el archivo de configuración con los tokens
+config.py
+
+# Ignorar directorios de caché de Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignorar entorno virtual si lo usas
+venv/
