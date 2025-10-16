@@ -8,9 +8,11 @@ from datetime import datetime
 import asyncio
 import urllib.parse
 
-# ... (Las funciones 'start' y 'solicitar_proveedor' se quedan igual) ...
-START, SELECTING_PROVIDER = 0, 1 # Ajuste para consistencia
+# Estados específicos para ESTA conversación
+SELECTING_PROVIDER = 0
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Muestra el menú principal y actúa como reseteo, terminando cualquier conversación."""
     keyboard = [
         [InlineKeyboardButton("Consultar Compras 🛒", callback_data="consultar_compras")],
         [InlineKeyboardButton("Capturar Compra 💸", callback_data="start_capture")],
@@ -18,6 +20,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     menu_text = "Menú Principal. ¿Qué deseas hacer?"
+    context.user_data.clear()
+
     if update.callback_query:
         await update.callback_query.answer()
         await update.callback_query.edit_message_text(text=menu_text, reply_markup=reply_markup)
@@ -27,23 +31,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             reply_markup=reply_markup
         )
     return ConversationHandler.END
+
 async def solicitar_proveedor(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query; await query.answer()
+    query = update.callback_query
+    await query.answer()
     await query.edit_message_text(text="Buscando proveedores... ⏳")
     proveedores = baserow_client.get_proveedores()
     if not proveedores:
         await query.edit_message_text(text="❌ Error: No se encontraron proveedores.")
         return await start(update, context)
-    keyboard = [[InlineKeyboardButton(p['value'], callback_data=f"prov_{p['id']}_{p['value']}")] for p in proveedores]
+    keyboard = []
+    for proveedor in proveedores:
+        callback_data = f"prov_{proveedor['id']}_{proveedor['value']}"
+        keyboard.append([InlineKeyboardButton(proveedor['value'], callback_data=callback_data)])
     keyboard.append([InlineKeyboardButton("⬅️ Volver al Menú", callback_data="main_menu")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(text="Selecciona un proveedor:", reply_markup=reply_markup)
     return SELECTING_PROVIDER
 
-
 async def mostrar_compras(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query; await query.answer()
-    parts = query.data.split('_', 2); nombre_proveedor = parts[2]
+    query = update.callback_query
+    await query.answer()
+    parts = query.data.split('_', 2)
+    nombre_proveedor = parts[2]
     await query.edit_message_text(text=f"Buscando y agrupando compras de *{nombre_proveedor}*... ⏳", parse_mode=ParseMode.MARKDOWN)
     compras = baserow_client.get_compras_por_proveedor(nombre_proveedor)
     if not compras:
@@ -59,13 +69,18 @@ async def mostrar_compras(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     header = f"🛒 *Compras a: {nombre_proveedor}*\n{'-'*35}\n"
     mensaje_para_imprimir = f"Reporte de Compras\nProveedor: {nombre_proveedor}\n--------------------\n"
     mensajes_telegram = []
-    mensaje_actual_telegram = header
+    mensaje_actual_telegram = ""
 
     for fecha_str in sorted(compras_agrupadas.keys()):
-        items_del_dia = compras_agrupadas[fecha_str]; total_diario = 0.0;
+        items_del_dia = compras_agrupadas[fecha_str]
+        total_diario = 0.0
+        comprobante_url = None
+        
         try:
-            fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d'); fecha_formateada = fecha_obj.strftime('%d-%m-%Y')
-        except ValueError: fecha_formateada = fecha_str
+            fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d')
+            fecha_formateada = fecha_obj.strftime('%d-%m-%Y')
+        except ValueError:
+            fecha_formateada = fecha_str
             
         bloque_dia_telegram = f"🗓️ *Compra del:* {fecha_formateada}\n"
         bloque_dia_impresion = f"Compra del: {fecha_formateada}\n"
@@ -79,21 +94,26 @@ async def mostrar_compras(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             bloque_dia_telegram += f"  - `{cantidad}` x _{producto}_\n"
             bloque_dia_impresion += f" - {cantidad} x {producto}\n"
             
-        bloque_dia_telegram += f"💰 *Total del día: ${total_diario:,.2f}*\n{'-'*35}\n"
+            if not comprobante_url and item.get('ComprobanteURL'):
+                comprobante_url = item.get('ComprobanteURL')
+            
+        bloque_dia_telegram += f"💰 *Total del día: ${total_diario:,.2f}*\n"
+        if comprobante_url:
+            bloque_dia_telegram += f"🧾 [Ver Comprobante]({comprobante_url})\n"
+        bloque_dia_telegram += f"{'-'*35}\n"
+        
         bloque_dia_impresion += f"Total del dia: ${total_diario:,.2f}\n--------------------\n"
 
-        if len(mensaje_actual_telegram) + len(bloque_dia_telegram) > 4096:
-            mensajes_telegram.append(mensaje_actual_telegram)
-            mensaje_actual_telegram = header + bloque_dia_telegram
+        if len(header + mensaje_actual_telegram + bloque_dia_telegram) > 4096:
+            mensajes_telegram.append(header + mensaje_actual_telegram)
+            mensaje_actual_telegram = bloque_dia_telegram
         else:
             mensaje_actual_telegram += bloque_dia_telegram
         
         mensaje_para_imprimir += bloque_dia_impresion
 
-    mensajes_telegram.append(mensaje_actual_telegram)
+    mensajes_telegram.append(header + mensaje_actual_telegram)
     
-    # --- LÓGICA DE IMPRESIÓN ---
-    # Codificamos el texto para pasarlo por la URL de forma segura
     encoded_report = urllib.parse.quote(mensaje_para_imprimir)
     print_url = f"https://webapp.dommsoluciones.com/print.html?data={encoded_report}"
     
@@ -103,7 +123,6 @@ async def mostrar_compras(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # Enviamos los mensajes de Telegram
     await query.edit_message_text(text=mensajes_telegram[0], parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
     if len(mensajes_telegram) > 1:
         for i, msg in enumerate(mensajes_telegram[1:], start=2):
@@ -114,7 +133,7 @@ async def mostrar_compras(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     return SELECTING_PROVIDER
 
-# ... (El resto del archivo, incluyendo el query_conv_handler, se queda igual)
+# --- CONVERSATION HANDLER DE CONSULTA (Autocontenido) ---
 query_conv_handler = ConversationHandler(
     entry_points=[CallbackQueryHandler(solicitar_proveedor, pattern="^consultar_compras$")],
     states={
@@ -127,4 +146,5 @@ query_conv_handler = ConversationHandler(
         CallbackQueryHandler(start, pattern="^main_menu$"),
         CommandHandler("start", start),
     ],
+    allow_reentry=True
 )

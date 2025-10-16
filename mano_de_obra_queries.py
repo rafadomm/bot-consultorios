@@ -3,29 +3,45 @@
 import baserow_queries
 import config
 
-def get_paid_workers():
-    """Obtiene una lista única de trabajadores desde la tabla de PAGOS."""
-    all_payments = baserow_queries._get_all_rows_paginated(config.ID_TABLA_PAGOS_MO)
-    if all_payments is None:
-        return []
+def get_mo_workers_and_weeks():
+    """Obtiene listas únicas de trabajadores y semanas desde la tabla DESGLOSE MANO DE OBRA."""
+    all_rows = baserow_queries._get_all_rows_paginated(config.ID_TABLA_DESGLOSE_MO)
+    if all_rows is None:
+        return [], []
 
     workers = set()
-    for row in all_payments:
-        if row.get('TRABAJADOR'):
+    weeks = set()
+    for row in all_rows:
+        if row.get('TRABAJADOR') and row['TRABAJADOR']['value']:
             workers.add(row['TRABAJADOR']['value'])
+        if row.get('SEMANA') and row['SEMANA']['value']:
+            weeks.add(row['SEMANA']['value'])
     
-    return sorted(list(workers))
+    return sorted(list(workers)), sorted(list(weeks))
 
-def get_payments_by_worker(worker_name):
-    """Obtiene todos los pagos para un trabajador específico desde la tabla de PAGOS."""
-    all_payments = baserow_queries._get_all_rows_paginated(config.ID_TABLA_PAGOS_MO)
-    if all_payments is None:
-        return []
+def get_work_details(worker_name, week_name):
+    """Obtiene el desglose de conceptos y el total para un trabajador y semana."""
+    all_rows = baserow_queries._get_all_rows_paginated(config.ID_TABLA_DESGLOSE_MO)
+    if all_rows is None:
+        return None
 
-    worker_payments = []
-    for row in all_payments:
-        if row.get('TRABAJADOR') and row['TRABAJADOR']['value'] == worker_name:
-            worker_payments.append(row)
-            
-    return worker_payments
+    work_details = []
+    total_amount = 0.0
+    for row in all_rows:
+        worker_match = row.get('TRABAJADOR') and row['TRABAJADOR']['value'] == worker_name
+        week_match = row.get('SEMANA') and row['SEMANA']['value'] == week_name
+        if worker_match and week_match:
+            try:
+                # --- ¡CORRECCIÓN! ---
+                # Añadimos la fila completa a los detalles.
+                work_details.append(row)
+                amount = float(row.get('IMPORTE', 0.0) or 0.0)
+                total_amount += amount
+            except (ValueError, TypeError):
+                continue
+                
+    return {
+        "details": work_details,
+        "total": total_amount
+    }
 
