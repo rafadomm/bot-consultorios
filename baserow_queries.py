@@ -2,6 +2,7 @@
 
 import requests
 import config
+from datetime import datetime
 
 REQUEST_TIMEOUT = 15
 HEADERS = {"Authorization": f"Token {config.BASEROW_TOKEN}"}
@@ -28,6 +29,25 @@ def _get_all_rows_paginated(table_id):
             
     return all_rows
 
+def get_project_start_date():
+    """Encuentra la fecha más antigua en las tablas de compras y mano de obra."""
+    all_purchases = _get_all_rows_paginated(config.ID_TABLA_COMPRAS) or []
+    all_work_advances = _get_all_rows_paginated(config.ID_TABLA_DESGLOSE_MO) or []
+
+    start_date = None
+    all_entries = all_purchases + all_work_advances
+    for entry in all_entries:
+        date_str = entry.get('FECHA')
+        if date_str:
+            try:
+                current_date = datetime.strptime(date_str, '%Y-%m-%d')
+                if start_date is None or current_date < start_date:
+                    start_date = current_date
+            except ValueError:
+                continue
+    
+    return start_date if start_date else datetime.now()
+
 def get_proveedores():
     """Obtiene la lista de proveedores desde la tabla PRECIOS."""
     items = _get_all_rows_paginated(config.ID_TABLA_PRECIOS)
@@ -46,7 +66,6 @@ def get_proveedores():
 
 def get_compras_por_proveedor(nombre_proveedor):
     """Obtiene las compras de un proveedor, con paginación completa."""
-    # PASO 1: Obtener TODOS los productos
     todos_los_productos = _get_all_rows_paginated(config.ID_TABLA_PRECIOS)
     if todos_los_productos is None: return []
         
@@ -61,7 +80,6 @@ def get_compras_por_proveedor(nombre_proveedor):
 
     if not product_ids: return []
             
-    # PASO 2: Obtener TODAS las compras y luego filtrarlas en Python.
     todas_las_compras = _get_all_rows_paginated(config.ID_TABLA_COMPRAS)
     if todas_las_compras is None: return []
 
@@ -88,7 +106,6 @@ def get_products_by_provider(provider_id):
     for product in all_products:
         provider_data_list = product.get('PROVEEDOR')
         if provider_data_list and isinstance(provider_data_list, list):
-            # Comparamos el ID del proveedor del producto con el ID que nos pasaron.
             if str(provider_data_list[0].get('id')) == str(provider_id):
                 provider_products.append(product)
     
@@ -101,34 +118,13 @@ def get_product_price(product_id):
         response = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         product_data = response.json()
-        # El precio es un lookup, por lo que puede ser una lista
         price_list = product_data.get('PRECIO UNITARIO')
+        
         if price_list and isinstance(price_list, list):
-            # Devolvemos el valor numérico del precio
             return float(price_list[0].get('value', '0.0').replace(',', ''))
-        # Manejar el caso donde el precio no es una lista (por si cambia el tipo de campo)
         elif price_list:
              return float(str(price_list).replace(',', ''))
-        return 0.0 # Devuelve 0.0 si no se encuentra el precio
-    except (requests.exceptions.RequestException, ValueError, TypeError):
-        return 0.0
-
-def get_product_price(product_id):
-    """Obtiene los datos de una sola fila de producto para leer su precio."""
-    url = f"{config.BASEROW_URL}database/rows/table/{config.ID_TABLA_PRECIOS}/{product_id}/?user_field_names=true"
-    try:
-        response = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
-        response.raise_for_status()
-        product_data = response.json()
-        
-        # El precio es un lookup, que Baserow puede devolver como lista
-        price_data = product_data.get('PRECIO UNITARIO')
-        
-        if isinstance(price_data, list) and price_data:
-            return float(price_data[0].get('value', '0.0').replace(',', ''))
-        elif isinstance(price_data, (int, float, str)):
-             return float(str(price_data).replace(',', ''))
              
-        return 0.0 # Devuelve 0.0 si no se encuentra el precio
+        return 0.0
     except (requests.exceptions.RequestException, ValueError, TypeError):
         return 0.0

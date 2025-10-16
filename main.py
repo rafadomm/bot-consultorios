@@ -1,9 +1,8 @@
 # main.py
 
 import config
-import query_handlers
-import capture_handlers
-import mano_de_obra_handlers
+import query_handlers, capture_handlers, mano_de_obra_handlers
+import dashboard_handler # ¡NUEVO IMPORT!
 from telegram.ext import Application, CommandHandler
 
 def main() -> None:
@@ -11,19 +10,16 @@ def main() -> None:
     
     application = Application.builder().token(config.TELEGRAM_TOKEN).build()
 
-    # 1. Comando /start (INDEPENDIENTE Y UNIVERSAL)
-    # Este es nuestro "reseteo". No pertenece a ninguna conversación.
-    # Llama a la función 'start' definida en query_handlers.py
+    # 1. Comando /start (Universal)
     application.add_handler(CommandHandler("start", query_handlers.start))
-
-    # 2. Registramos la conversación de CONSULTA de Compras (importada desde query_handlers.py)
-    application.add_handler(query_handlers.query_conv_handler)
     
-    # 3. Registramos la conversación de CAPTURA de Compras (importada desde capture_handlers.py)
+    # 2. Registramos las conversaciones modulares
+    application.add_handler(query_handlers.query_conv_handler)
     application.add_handler(capture_handlers.capture_conv_handler)
-
-    # 4. Registramos la conversación de MANO DE OBRA (importada desde mano_de_obra_handlers.py)
     application.add_handler(mano_de_obra_handlers.mano_de_obra_conv_handler)
+
+    # 3. ¡CORRECCIÓN! Registramos el NUEVO ConversationHandler para el dashboard
+    application.add_handler(dashboard_handler.dashboard_conv_handler)
 
     print("🚀 Bot iniciado y escuchando. Presiona Ctrl-C para detener.")
     application.run_polling()
