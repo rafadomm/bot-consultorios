@@ -1,8 +1,11 @@
 # main.py
 
 import config
-import query_handlers, capture_handlers, mano_de_obra_handlers
-import dashboard_handler # ¡NUEVO IMPORT!
+import query_handlers
+import capture_handlers
+import mano_de_obra_handlers
+import dashboard_handler
+from security import restricted
 from telegram.ext import Application, CommandHandler
 
 def main() -> None:
@@ -10,15 +13,15 @@ def main() -> None:
     
     application = Application.builder().token(config.TELEGRAM_TOKEN).build()
 
-    # 1. Comando /start (Universal)
-    application.add_handler(CommandHandler("start", query_handlers.start))
+    # 1. Comando /start (Universal y Protegido)
+    # Este es nuestro "reseteo" y la puerta de entrada principal.
+    application.add_handler(CommandHandler("start", restricted(query_handlers.start)))
     
     # 2. Registramos las conversaciones modulares
+    # La seguridad se aplica dentro de cada handler.
     application.add_handler(query_handlers.query_conv_handler)
     application.add_handler(capture_handlers.capture_conv_handler)
     application.add_handler(mano_de_obra_handlers.mano_de_obra_conv_handler)
-
-    # 3. ¡CORRECCIÓN! Registramos el NUEVO ConversationHandler para el dashboard
     application.add_handler(dashboard_handler.dashboard_conv_handler)
 
     print("🚀 Bot iniciado y escuchando. Presiona Ctrl-C para detener.")
