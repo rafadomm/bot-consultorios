@@ -12,9 +12,9 @@ def get_mo_workers_and_weeks():
     workers = set()
     weeks = set()
     for row in all_rows:
-        if row.get('TRABAJADOR') and row['TRABAJADOR']['value']:
+        if row.get('TRABAJADOR') and row.get('TRABAJADOR').get('value'):
             workers.add(row['TRABAJADOR']['value'])
-        if row.get('SEMANA') and row['SEMANA']['value']:
+        if row.get('SEMANA') and row.get('SEMANA').get('value'):
             weeks.add(row['SEMANA']['value'])
     
     return sorted(list(workers)), sorted(list(weeks))
@@ -28,12 +28,11 @@ def get_work_details(worker_name, week_name):
     work_details = []
     total_amount = 0.0
     for row in all_rows:
-        worker_match = row.get('TRABAJADOR') and row['TRABAJADOR']['value'] == worker_name
-        week_match = row.get('SEMANA') and row['SEMANA']['value'] == week_name
+        worker_match = row.get('TRABAJADOR') and row.get('TRABAJADOR').get('value') == worker_name
+        week_match = row.get('SEMANA') and row.get('SEMANA').get('value') == week_name
         if worker_match and week_match:
             try:
-                # --- ¡CORRECCIÓN! ---
-                # Añadimos la fila completa a los detalles.
+                # Añadimos la fila completa para tener acceso a todos los campos
                 work_details.append(row)
                 amount = float(row.get('IMPORTE', 0.0) or 0.0)
                 total_amount += amount
@@ -44,4 +43,3 @@ def get_work_details(worker_name, week_name):
         "details": work_details,
         "total": total_amount
     }
-
